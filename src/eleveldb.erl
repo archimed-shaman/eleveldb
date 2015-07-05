@@ -22,6 +22,7 @@
 -module(eleveldb).
 
 -export([open/2,
+         open/3,
          close/1,
          get/3,
          put/4,
@@ -80,6 +81,8 @@ init() ->
              end,
     erlang:load_nif(SoName, application:get_all_env(eleveldb)).
 
+-type init_options() :: [{comparator, string(), string()}].
+
 -type open_options() :: [{create_if_missing, boolean()} |
                          {error_if_exists, boolean()} |
                          {write_buffer_size, pos_integer()} |
@@ -120,15 +123,19 @@ init() ->
 
 -opaque itr_ref() :: binary().
 
--spec async_open(reference(), string(), open_options()) -> ok.
-async_open(_CallerRef, _Name, _Opts) ->
+-spec async_open(reference(), string(), open_options(), init_options()) -> ok.
+async_open(_CallerRef, _Name, _Opts, _InitOpts) ->
     erlang:nif_error({error, not_loaded}).
 
 -spec open(string(), open_options()) -> {ok, db_ref()} | {error, any()}.
 open(Name, Opts) ->
+    open(Name, Opts, []).
+
+-spec open(string(), open_options(), init_options()) -> {ok, db_ref()} | {error, any()}.
+open(Name, Opts, InitOpts) ->
     CallerRef = make_ref(),
     Opts2 = add_open_defaults(Opts),
-    async_open(CallerRef, Name, Opts2),
+    async_open(CallerRef, Name, Opts2, InitOpts),
     ?WAIT_FOR_REPLY(CallerRef).
 
 -spec close(db_ref()) -> ok | {error, any()}.

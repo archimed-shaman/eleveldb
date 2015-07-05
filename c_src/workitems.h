@@ -106,13 +106,22 @@ private:
 
 class OpenTask : public WorkTask
 {
+public:
+    struct initial_options
+    {
+        std::string library_name;
+        std::string function_name;
+    };
+
 protected:
     std::string         db_name;
     leveldb::Options   *open_options;  // associated with db handle, we don't free it
+    initial_options     init_opts;
 
 public:
     OpenTask(ErlNifEnv* caller_env, ERL_NIF_TERM& _caller_ref,
-             const std::string& db_name_, leveldb::Options *open_options_);
+             const std::string& db_name_, leveldb::Options *open_options_,
+             const initial_options& init_options_);
 
     virtual ~OpenTask() {};
 

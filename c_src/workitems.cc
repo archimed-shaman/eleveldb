@@ -21,6 +21,7 @@
 // -------------------------------------------------------------------
 
 #include <syslog.h>
+#include <dlfcn.h>
 
 #ifndef __ELEVELDB_DETAIL_HPP
     #include "detail.hpp"
@@ -146,9 +147,11 @@ OpenTask::OpenTask(
     ErlNifEnv* caller_env,
     ERL_NIF_TERM& _caller_ref,
     const std::string& db_name_,
-    leveldb::Options *open_options_)
+    leveldb::Options *open_options_,
+    const initial_options& init_options_)
     : WorkTask(caller_env, _caller_ref),
-    db_name(db_name_), open_options(open_options_)
+      db_name(db_name_), open_options(open_options_),
+      init_opts(init_options_)
 {
 }   // OpenTask::OpenTask
 
@@ -159,12 +162,40 @@ OpenTask::operator()()
     void * db_ptr_ptr;
     leveldb::DB *db(0);
 
+    void *dl_handle = 0;
+    if(!init_opts.library_name.empty() && !init_opts.function_name.empty())
+    {
+        dl_handle = dlopen(init_opts.library_name.c_str(), RTLD_LAZY);
+        if(!dl_handle)
+        {
+              ERL_NIF_TERM lib = enif_make_string(local_env(), init_opts.library_name.c_str(),
+                                                  ERL_NIF_LATIN1);
+              return enif_make_tuple2(local_env(), eleveldb::ATOM_ERROR,
+                                      enif_make_tuple2(local_env(), ATOM_NO_LIBRARY, lib));
+        }
+
+        leveldb::Comparator * (*func)(void) = NULL;
+        char * error = NULL;
+        *(void **)(&func) = dlsym(dl_handle, init_opts.function_name.c_str());
+        error = dlerror();
+        if (error != NULL)
+        {
+            dlclose(dl_handle);
+            ERL_NIF_TERM error_m = enif_make_string(local_env(), error,
+                                                    ERL_NIF_LATIN1);
+            return enif_make_tuple2(local_env(), eleveldb::ATOM_ERROR,
+                                    enif_make_tuple2(local_env(), ATOM_NO_FUNCTION, error_m));
+        }
+
+        open_options->comparator = func();
+    }
+    
     leveldb::Status status = leveldb::DB::Open(*open_options, db_name, &db);
 
     if(!status.ok())
         return error_tuple(local_env(), ATOM_ERROR_DB_OPEN, status);
 
-    db_ptr_ptr=DbObject::CreateDbObject(db, open_options);
+    db_ptr_ptr=DbObject::CreateDbObject(db, open_options, dl_handle);
 
     // create a resource reference to send erlang
     ERL_NIF_TERM result = enif_make_resource(local_env(), db_ptr_ptr);

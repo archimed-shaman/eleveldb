@@ -67,7 +67,7 @@ static ErlNifFunc nif_funcs[] =
     {"repair", 2, eleveldb_repair},
     {"is_empty", 1, eleveldb_is_empty},
 
-    {"async_open", 3, eleveldb::async_open},
+    {"async_open", 4, eleveldb::async_open},
     {"async_write", 4, eleveldb::async_write},
     {"async_get", 4, eleveldb::async_get},
 
@@ -88,6 +88,7 @@ ERL_NIF_TERM ATOM_ERROR;
 ERL_NIF_TERM ATOM_EINVAL;
 ERL_NIF_TERM ATOM_BADARG;
 ERL_NIF_TERM ATOM_CREATE_IF_MISSING;
+ERL_NIF_TERM ATOM_COMPARATOR;
 ERL_NIF_TERM ATOM_ERROR_IF_EXISTS;
 ERL_NIF_TERM ATOM_WRITE_BUFFER_SIZE;
 ERL_NIF_TERM ATOM_SST_BLOCK_SIZE;
@@ -134,6 +135,8 @@ ERL_NIF_TERM ATOM_DELETE_THRESHOLD;
 ERL_NIF_TERM ATOM_TIERED_SLOW_LEVEL;
 ERL_NIF_TERM ATOM_TIERED_FAST_PREFIX;
 ERL_NIF_TERM ATOM_TIERED_SLOW_PREFIX;
+ERL_NIF_TERM ATOM_NO_LIBRARY;
+ERL_NIF_TERM ATOM_NO_FUNCTION;
 }   // namespace eleveldb
 
 
@@ -287,6 +290,30 @@ ERL_NIF_TERM parse_init_option(ErlNifEnv* env, ERL_NIF_TERM item, EleveldbOption
 
     return eleveldb::ATOM_OK;
 }
+
+
+ERL_NIF_TERM parse_init_option(ErlNifEnv* env, ERL_NIF_TERM item, eleveldb::OpenTask::initial_options& opts)
+{
+    int arity;
+    const ERL_NIF_TERM* option;
+    if (enif_get_tuple(env, item, &arity, &option))
+    {
+        if (option[0] == eleveldb::ATOM_COMPARATOR && 3==arity)
+        {
+             char file[1024];
+             char method[1024];
+
+             if (enif_get_string(env, option[1], file, sizeof(file), ERL_NIF_LATIN1) &&
+                 enif_get_string(env, option[2], method, sizeof(method), ERL_NIF_LATIN1))
+             {
+                 opts.library_name = file;
+                 opts.function_name = method;
+             }
+        }
+    }
+    return eleveldb::ATOM_OK;
+}
+
 
 ERL_NIF_TERM parse_open_option(ErlNifEnv* env, ERL_NIF_TERM item, leveldb::Options& opts)
 {
@@ -549,7 +576,8 @@ async_open(
     char db_name[4096];
 
     if(!enif_get_string(env, argv[1], db_name, sizeof(db_name), ERL_NIF_LATIN1) ||
-       !enif_is_list(env, argv[2]))
+       !enif_is_list(env, argv[2]) ||
+       !enif_is_list(env, argv[3]))
     {
         return enif_make_badarg(env);
     }   // if
@@ -561,6 +589,9 @@ async_open(
     leveldb::Options *opts = new leveldb::Options;
     fold(env, argv[2], parse_open_option, *opts);
     opts->fadvise_willneed = priv.m_Opts.m_FadviseWillNeed;
+
+    OpenTask::initial_options init_options;
+    fold(env, argv[3], parse_init_option, init_options);
 
     // convert total_leveldb_mem to byte count if it arrived as percent
     //  This happens now because there is no guarantee as to when the total_memory
@@ -591,7 +622,7 @@ async_open(
     opts->limited_developer_mem=priv.m_Opts.m_LimitedDeveloper;
 
     eleveldb::WorkTask *work_item = new eleveldb::OpenTask(env, caller_ref,
-                                                              db_name, opts);
+                                                           db_name, opts, init_options);
 
     if(false == priv.thread_pool.submit(work_item))
     {
@@ -1213,6 +1244,7 @@ try
     ATOM(eleveldb::ATOM_TRUE, "true");
     ATOM(eleveldb::ATOM_FALSE, "false");
     ATOM(eleveldb::ATOM_CREATE_IF_MISSING, "create_if_missing");
+    ATOM(eleveldb::ATOM_COMPARATOR, "comparator");
     ATOM(eleveldb::ATOM_ERROR_IF_EXISTS, "error_if_exists");
     ATOM(eleveldb::ATOM_WRITE_BUFFER_SIZE, "write_buffer_size");
     ATOM(eleveldb::ATOM_SST_BLOCK_SIZE, "sst_block_size");
@@ -1259,6 +1291,8 @@ try
     ATOM(eleveldb::ATOM_TIERED_SLOW_LEVEL, "tiered_slow_level");
     ATOM(eleveldb::ATOM_TIERED_FAST_PREFIX, "tiered_fast_prefix");
     ATOM(eleveldb::ATOM_TIERED_SLOW_PREFIX, "tiered_slow_prefix");
+    ATOM(eleveldb::ATOM_NO_LIBRARY, "no_library");
+    ATOM(eleveldb::ATOM_NO_FUNCTION, "no_function");
 #undef ATOM
 
 

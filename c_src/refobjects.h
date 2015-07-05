@@ -183,12 +183,13 @@ public:
 
     Mutex m_ItrMutex;                         //!< mutex protecting m_ItrList
     std::list<class ItrObject *> m_ItrList;   //!< ItrObjects holding ref count to this
+    void *m_DlHandler;                        // *.so library optional handler (for comparators)
 
 protected:
     static ErlNifResourceType* m_Db_RESOURCE;
 
 public:
-    DbObject(leveldb::DB * DbPtr, leveldb::Options * Options);
+    DbObject(leveldb::DB * DbPtr, leveldb::Options * Options, void * DlHandler = 0);
 
     virtual ~DbObject();
 
@@ -201,7 +202,7 @@ public:
 
     static void CreateDbObjectType(ErlNifEnv * Env);
 
-    static void * CreateDbObject(leveldb::DB * Db, leveldb::Options * DbOptions);
+    static void * CreateDbObject(leveldb::DB * Db, leveldb::Options * DbOptions, void * DlHandler = 0);
 
     static DbObject * RetrieveDbObject(ErlNifEnv * Env, const ERL_NIF_TERM & DbTerm, bool * term_ok=NULL);
 

@@ -31,6 +31,7 @@
     #include "workitems.h"
 #endif
 
+#include <dlfcn.h>
 #include "leveldb/cache.h"
 #include "leveldb/filter_policy.h"
 
@@ -223,7 +224,8 @@ DbObject::CreateDbObjectType(
 void *
 DbObject::CreateDbObject(
     leveldb::DB * Db,
-    leveldb::Options * DbOptions)
+    leveldb::Options * DbOptions,
+    void * DlHandler)
 {
     DbObject * ret_ptr;
     void * alloc_ptr;
@@ -231,7 +233,7 @@ DbObject::CreateDbObject(
     // the alloc call initializes the reference count to "one"
     alloc_ptr=enif_alloc_resource(m_Db_RESOURCE, sizeof(DbObject *));
 
-    ret_ptr=new DbObject(Db, DbOptions);
+    ret_ptr=new DbObject(Db, DbOptions, DlHandler);
     *(DbObject **)alloc_ptr=ret_ptr;
 
     // manual reference increase to keep active until "eleveldb_close" called
@@ -308,8 +310,9 @@ DbObject::DbObjectResourceCleanup(
 
 DbObject::DbObject(
     leveldb::DB * DbPtr,
-    leveldb::Options * Options)
-    : m_Db(DbPtr), m_DbOptions(Options)
+    leveldb::Options * Options,
+    void * DlHandler)
+    : m_Db(DbPtr), m_DbOptions(Options), m_DlHandler(DlHandler)
 {
 }   // DbObject::DbObject
 
@@ -334,6 +337,12 @@ DbObject::~DbObject()
         delete m_DbOptions;
         m_DbOptions = NULL;
     }   // if
+
+    if(m_DlHandler)
+    {
+        dlclose(m_DlHandler);
+        m_DlHandler = NULL;
+    }
 
     return;
 
